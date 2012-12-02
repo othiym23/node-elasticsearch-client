@@ -7,7 +7,12 @@ var spawn               = require('child_process').spawn
   , ElasticSearchClient = require('../../index')
   ;
 
-test("cluster functionality", function (t) {
+/*
+ * constants
+ */
+var INDEX_NAME = 'your_index_name';
+
+test("cluster commands", function (t) {
   // shutdown shuts down the nodes, so need to run the cluster ourselves
   var server = spawn('elasticsearch', ['-f'], {stdio : 'pipe'});
   server.on('close', function () {
@@ -26,26 +31,40 @@ test("cluster functionality", function (t) {
           port : 9200
         });
 
-        t.test("health call", function (t) {
+        t.test("proactive index cleanup", function (t) {
           t.plan(1);
+          var gone = client.deleteIndex(INDEX_NAME);
+
+          gone.on('data', function (data) {
+            var returned = JSON.parse(data);
+            t.ok(returned);
+            t.end();
+          });
+
+          gone.exec();
+        });
+
+        t.test("health command", function (t) {
+          t.plan(2);
           var health = client.health();
 
           health.on('data', function (data) {
             var returned = JSON.parse(data);
-            t.equal(returned.status, 'green', "elasticsearch cluster should have a good status");
+            t.ok(returned.number_of_nodes > 0, "at least one node is up");
+            t.ok(returned.status, "cluster status is returned");
             t.end();
           });
 
           health.exec();
         });
 
-        t.test("state call", function (t) {
+        t.test("state command", function (t) {
           t.plan(7);
           var state = client.state({filter_nodes : true});
 
           state.on('data', function (data) {
             var returned = JSON.parse(data);
-            t.notOk(returned.nodes, "doesn't include list of nodes due to filtering");
+            t.notOk(returned.nodes, "node list is filtered");
             t.ok(returned.cluster_name, "includes a cluster name");
             t.ok(returned.blocks, "includes blocks");
             t.ok(returned.allocations, "includes allocation list");
@@ -58,7 +77,7 @@ test("cluster functionality", function (t) {
           state.exec();
         });
 
-        t.test("nodesInfo call", function (t) {
+        t.test("nodesInfo command", function (t) {
           t.plan(3);
           var info = client.nodesInfo([]);
 
@@ -73,7 +92,7 @@ test("cluster functionality", function (t) {
           info.exec();
         });
 
-        t.test("nodesStats call", function (t) {
+        t.test("nodesStats command", function (t) {
           t.plan(2);
           var stats = client.nodesStats([]);
 
@@ -87,7 +106,7 @@ test("cluster functionality", function (t) {
           stats.exec();
         });
 
-        t.test("nodesShutdown call", function (t) {
+        t.test("nodesShutdown command", function (t) {
           t.plan(2);
           var shutdown = client.nodesShutdown([]);
 
